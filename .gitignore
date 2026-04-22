@@ -24,5 +24,8 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# data (soumissions de formulaires)
+data/
+
 # misc
 .DS_Store
