@@ -27,5 +27,7 @@ lerna-debug.log*
 # data (soumissions de formulaires)
 data/
 
+dist/
+
 # misc
 .DS_Store
