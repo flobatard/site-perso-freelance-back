@@ -3,7 +3,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: site-perso-freelance-back:${TAG:-latest}
+    image: ${IMAGE:-site-perso-freelance-back:${TAG:-latest}}
     container_name: site-perso-freelance-back
     restart: unless-stopped
     env_file:
