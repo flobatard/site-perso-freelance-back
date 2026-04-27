@@ -3,8 +3,10 @@ import { mkdir, writeFile } from 'node:fs/promises'
 import { join, extname } from 'node:path'
 import { randomBytes } from 'node:crypto'
 import { sendShowcaseFormNotification, type ShowcaseFormScalars } from '../mailer.js'
+import { isS3Configured, uploadObject } from '../storage.js'
 
 const DATA_DIR = process.env.DATA_DIR ?? 'data'
+const S3_PREFIX = 'showcase-forms'
 
 const form = new Hono()
 
@@ -14,29 +16,27 @@ const generateSubmissionId = (): string => {
   return `${ts}-${rand}`
 }
 
-const writeUpload = async (dir: string, name: string, file: File): Promise<void> => {
-  const buf = Buffer.from(await file.arrayBuffer())
-  await writeFile(join(dir, name), buf)
-}
+type Asset = { name: string; buffer: Buffer; contentType?: string }
 
-const persistSubmission = async (
-  dir: string,
-  data: ShowcaseFormScalars,
-  logo: File | null,
-  photos: File[],
-): Promise<void> => {
+const fileToAsset = async (name: string, file: File): Promise<Asset> => ({
+  name,
+  buffer: Buffer.from(await file.arrayBuffer()),
+  contentType: file.type || undefined,
+})
+
+const persistToDisk = async (dir: string, dataJson: string, assets: Asset[]): Promise<void> => {
   const photosDir = join(dir, 'photos')
   await mkdir(photosDir, { recursive: true })
-  await writeFile(join(dir, 'data.json'), JSON.stringify(data, null, 2))
+  await writeFile(join(dir, 'data.json'), dataJson)
+  await Promise.all(assets.map((a) => writeFile(join(dir, a.name), a.buffer)))
+}
 
-  const tasks: Promise<void>[] = []
-  if (logo) {
-    tasks.push(writeUpload(dir, `logo${extname(logo.name)}`, logo))
-  }
-  photos.forEach((file, i) => {
-    tasks.push(writeUpload(photosDir, `photo-${i}${extname(file.name)}`, file))
-  })
-  await Promise.all(tasks)
+const uploadToS3 = async (id: string, dataJson: string, assets: Asset[]): Promise<void> => {
+  const prefix = `${S3_PREFIX}/${id}`
+  await Promise.all([
+    uploadObject(`${prefix}/data.json`, Buffer.from(dataJson), 'application/json'),
+    ...assets.map((a) => uploadObject(`${prefix}/${a.name}`, a.buffer, a.contentType)),
+  ])
 }
 
 const collectFiles = (value: unknown): File[] => {
@@ -66,9 +66,20 @@ form.post('/showcase-form', async (c) => {
 
   const id = generateSubmissionId()
   const dir = join(DATA_DIR, 'showcase-forms', id)
+  const dataJson = JSON.stringify(data, null, 2)
 
-  const [persistResult, emailResult] = await Promise.allSettled([
-    persistSubmission(dir, data, logo, photos),
+  const assets: Asset[] = []
+  if (logo) {
+    assets.push(await fileToAsset(`logo${extname(logo.name)}`, logo))
+  }
+  for (const [i, file] of photos.entries()) {
+    assets.push(await fileToAsset(`photos/photo-${i}${extname(file.name)}`, file))
+  }
+
+  const s3Enabled = isS3Configured()
+  const [persistResult, s3Result, emailResult] = await Promise.allSettled([
+    persistToDisk(dir, dataJson, assets),
+    s3Enabled ? uploadToS3(id, dataJson, assets) : Promise.resolve(),
     sendShowcaseFormNotification(id, data, dir),
   ])
 
@@ -76,11 +87,22 @@ form.post('/showcase-form', async (c) => {
     console.error('[showcase-form] persist failed', persistResult.reason)
     return c.json({ error: 'Failed to persist submission' }, 500)
   }
+  if (s3Result.status === 'rejected') {
+    console.error('[showcase-form] s3 upload failed', s3Result.reason)
+  }
   if (emailResult.status === 'rejected') {
     console.error('[showcase-form] email failed', emailResult.reason)
   }
+  if (!s3Enabled) {
+    console.warn('[showcase-form] S3 not configured, skipping object upload')
+  }
 
-  return c.json({ id, folder: dir, emailSent: emailResult.status === 'fulfilled' })
+  return c.json({
+    id,
+    folder: dir,
+    emailSent: emailResult.status === 'fulfilled',
+    s3Uploaded: s3Result.status === 'fulfilled' && s3Enabled,
+  })
 })
 
 export default form
