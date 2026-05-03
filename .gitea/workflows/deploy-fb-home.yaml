@@ -98,13 +98,6 @@ jobs:
           key: ${{ secrets.PRIVATE_SSH_KEY }}
           script: mkdir -p ${{ env.DEPLOY_PATH }}
 
-      - name: Materialize .env from secret
-        env:
-          ENV_VARIABLES: ${{ secrets.ENV_VARIABLES }}
-        run: |
-          printf '%s' "$ENV_VARIABLES" > .env
-          chmod 600 .env
-
       - name: Upload ${{ env.COMPOSE_FILE }}
         uses: appleboy/scp-action@v0.1.7
         with:
@@ -114,14 +107,19 @@ jobs:
           source: ${{ env.COMPOSE_FILE }}
           target: ${{ env.DEPLOY_PATH }}
 
-      - name: Upload .env
-        uses: appleboy/scp-action@v0.1.7
+      - name: Write .env on target host
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          ENV_VARIABLES: ${{ secrets.ENV_VARIABLES }}
         with:
           host: ${{ env.HOST }}
           username: ${{ env.SSH_USER }}
           key: ${{ secrets.PRIVATE_SSH_KEY }}
-          source: .env
-          target: ${{ env.DEPLOY_PATH }}
+          envs: ENV_VARIABLES
+          script: |
+            umask 077
+            mkdir -p ${{ env.DEPLOY_PATH }}
+            printf '%s' "$ENV_VARIABLES" > ${{ env.DEPLOY_PATH }}/.env
 
       - name: Pull images and restart services
         uses: appleboy/ssh-action@v1.0.3
