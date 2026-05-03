@@ -27,6 +27,10 @@ docker compose --profile dev up minio minio-init
 
 Le bucket défini par `S3_BUCKET` est créé automatiquement par le service `minio-init`.
 
+## Nettoyage automatique
+
+Au démarrage puis toutes les 24 h, le serveur purge les soumissions locales de `data/showcase-forms/` plus anciennes que 30 jours. Les objets stockés sur S3 ne sont pas affectés.
+
 ## Documentation
 
 Voir [CLAUDE.md](CLAUDE.md) pour la stack, les routes, les variables d'env et les conventions.

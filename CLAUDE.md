@@ -78,6 +78,12 @@ Génère un identifiant `YYYYMMDDHHMMSS-<6 hex>` puis, en parallèle :
 
 Réponse JSON : `{ id, folder, emailSent }`. 500 si la persistance échoue ; un échec mail est loggé mais ne fait pas échouer la requête.
 
+## Nettoyage automatique des soumissions
+
+[src/cleanup.ts](src/cleanup.ts) déclenche au démarrage du serveur, puis toutes les 24 h, la suppression récursive des sous-dossiers de `${DATA_DIR}/showcase-forms/` dont le `mtime` est antérieur à 30 jours. La rétention (30 j) et l'intervalle (24 h) sont en dur dans le module. L'interval utilise `.unref()` pour ne pas empêcher l'arrêt du process.
+
+Le nettoyage ne concerne que le stockage disque local — les objets S3 ne sont pas touchés (à gérer via une lifecycle rule côté bucket si nécessaire).
+
 ## Conventions
 
 - ESM strict : toujours inclure l'extension `.js` dans les imports relatifs compilés (`NodeNext`).
@@ -88,9 +94,12 @@ Réponse JSON : `{ id, folder, emailSent }`. 500 si la persistance échoue ; un 
 
 ```
 src/
-  index.ts        # bootstrap Hono + serveur, CORS, montage des routes
+  index.ts        # bootstrap Hono + serveur, CORS, montage des routes, scheduler de cleanup
+  cleanup.ts      # purge récurrente des soumissions de plus de 30 jours
+  mailer.ts       # transport SMTP nodemailer + template de notification
+  storage.ts      # client S3 + helpers d'upload
   routes/
-    form.ts       # /form/showcase-form (persistance disque + mail)
+    form.ts       # /form/showcase-form (persistance disque + S3 + mail)
 data/             # soumissions persistées (gitignored, bind-mount Docker)
 template.env      # gabarit des variables d'environnement
 ```
