@@ -2,6 +2,7 @@ import { serve } from '@hono/node-server'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import form from './routes/form.js'
+import { startCleanupScheduler } from './cleanup.js'
 
 const app = new Hono()
 
@@ -25,6 +26,8 @@ app.get('/', (c) => {
 })
 
 app.route('/form', form)
+
+startCleanupScheduler()
 
 serve({
   fetch: app.fetch,
