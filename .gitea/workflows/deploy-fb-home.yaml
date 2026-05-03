@@ -105,15 +105,22 @@ jobs:
           printf '%s' "$ENV_VARIABLES" > .env
           chmod 600 .env
 
-      - name: Upload ${{ env.COMPOSE_FILE }} and .env
+      - name: Upload ${{ env.COMPOSE_FILE }}
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ env.HOST }}
           username: ${{ env.SSH_USER }}
           key: ${{ secrets.PRIVATE_SSH_KEY }}
-          source: |
-            ${{ env.COMPOSE_FILE }}
-            .env
+          source: ${{ env.COMPOSE_FILE }}
+          target: ${{ env.DEPLOY_PATH }}
+
+      - name: Upload .env
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ env.HOST }}
+          username: ${{ env.SSH_USER }}
+          key: ${{ secrets.PRIVATE_SSH_KEY }}
+          source: .env
           target: ${{ env.DEPLOY_PATH }}
 
       - name: Pull images and restart services
