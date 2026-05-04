@@ -7,10 +7,12 @@ export type ShowcaseFormScalars = {
   goal: string
   inspirations: string
   adjectives: string[]
-  brandAssets: string
+  brandAssets: 'yes' | 'no' | ''
   colors: string[]
-  photos: string
+  photos: 'yes' | 'no' | ''
   sections: string[]
+  customSections: string[]
+  deadline: string
   hasDomain: 'yes' | 'no' | ''
   domainName: string
   notes: string
@@ -19,6 +21,7 @@ export type ShowcaseFormScalars = {
   email: string
   phone: string
   projectName: string
+  consent: boolean
 }
 
 let cachedTransporter: Transporter | null = null
@@ -47,24 +50,35 @@ const escapeHtml = (value: string): string =>
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;')
 
+const yesNo = (value: 'yes' | 'no' | ''): string =>
+  value === 'yes' ? 'oui' : value === 'no' ? 'non' : ''
+
 const renderShowcaseEmail = (
   id: string,
   data: ShowcaseFormScalars,
   folderPath: string,
 ): string => {
+  const contactName = [data.firstName, data.lastName].filter(Boolean).join(' ')
   const rows: [string, string][] = [
+    ['Projet', data.projectName],
+    ['Contact', contactName],
+    ['Email', data.email],
+    ['Téléphone', data.phone],
     ['Activité', data.activity],
     ['Cible', data.audience],
     ['Objectif', data.goal],
+    ['Échéance', data.deadline],
     ['Inspirations', data.inspirations],
     ['Adjectifs', data.adjectives.join(', ')],
-    ['Assets de marque', data.brandAssets],
+    ['Assets de marque', yesNo(data.brandAssets)],
     ['Couleurs', data.colors.join(', ')],
-    ['Photos (description)', data.photos],
+    ['Photos disponibles', yesNo(data.photos)],
     ['Sections', data.sections.join(', ')],
-    ['Domaine ?', data.hasDomain],
+    ['Sections personnalisées', data.customSections.join(', ')],
+    ['Domaine ?', yesNo(data.hasDomain)],
     ['Nom de domaine', data.domainName],
     ['Notes', data.notes],
+    ['Consentement', data.consent ? 'oui' : 'non'],
   ]
   const body = rows
     .map(
