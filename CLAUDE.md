@@ -67,20 +67,24 @@ Si `SMTP_HOST`, `SMTP_FROM` ou `NOTIFY_TO` manquent, l'envoi de mail est silenci
 | --- | --- | --- |
 | GET | `/` | health / hello |
 | POST | `/form/showcase-form` | réception du formulaire vitrine (multipart) |
+| POST | `/form/ecommerce-form` | réception du formulaire e-commerce (multipart) |
 
-### `POST /form/showcase-form`
+### `POST /form/showcase-form` et `POST /form/ecommerce-form`
 
-Multipart attendu : champ `data` (JSON sérialisé des scalars du formulaire), champ optionnel `logo` (1 fichier), champ optionnel `photos` (N fichiers).
+Même pipeline pour les deux routes (factorisé dans `handleSubmission`). Multipart attendu : champ `data` (JSON sérialisé des scalars du formulaire), champ optionnel `logo` (1 fichier), champ optionnel `photos` (N fichiers).
 
 Génère un identifiant `YYYYMMDDHHMMSS-<6 hex>` puis, en parallèle :
-1. Persiste sous `${DATA_DIR}/showcase-forms/<id>/` : `data.json`, `logo.<ext>`, `photos/photo-<i>.<ext>`.
-2. Envoie un mail HTML récapitulatif via SMTP.
+1. Persiste sous `${DATA_DIR}/<subdir>/<id>/` : `data.json`, `logo.<ext>`, `photos/photo-<i>.<ext>`.
+2. Uploade les mêmes objets sur S3 sous le préfixe `<subdir>/<id>/` si S3 est configuré.
+3. Envoie un mail HTML récapitulatif via SMTP.
 
-Réponse JSON : `{ id, folder, emailSent }`. 500 si la persistance échoue ; un échec mail est loggé mais ne fait pas échouer la requête.
+Le sous-dossier (et le préfixe S3) vaut `showcase-forms` pour la route vitrine et `ecommerce-forms` pour la route e-commerce.
+
+Réponse JSON : `{ id, folder, emailSent, s3Uploaded }`. 500 si la persistance disque échoue ; les échecs S3 et mail sont loggés mais ne font pas échouer la requête.
 
 ## Nettoyage automatique des soumissions
 
-[src/cleanup.ts](src/cleanup.ts) déclenche au démarrage du serveur, puis toutes les 24 h, la suppression récursive des sous-dossiers de `${DATA_DIR}/showcase-forms/` dont le `mtime` est antérieur à 30 jours. La rétention (30 j) et l'intervalle (24 h) sont en dur dans le module. L'interval utilise `.unref()` pour ne pas empêcher l'arrêt du process.
+[src/cleanup.ts](src/cleanup.ts) déclenche au démarrage du serveur, puis toutes les 24 h, la suppression récursive des sous-dossiers de `${DATA_DIR}/showcase-forms/` et `${DATA_DIR}/ecommerce-forms/` dont le `mtime` est antérieur à 30 jours. La rétention (30 j) et l'intervalle (24 h) sont en dur dans le module. L'interval utilise `.unref()` pour ne pas empêcher l'arrêt du process.
 
 Le nettoyage ne concerne que le stockage disque local — les objets S3 ne sont pas touchés (à gérer via une lifecycle rule côté bucket si nécessaire).
 
@@ -99,7 +103,7 @@ src/
   mailer.ts       # transport SMTP nodemailer + template de notification
   storage.ts      # client S3 + helpers d'upload
   routes/
-    form.ts       # /form/showcase-form (persistance disque + S3 + mail)
+    form.ts       # /form/showcase-form + /form/ecommerce-form (persistance disque + S3 + mail)
 data/             # soumissions persistées (gitignored, bind-mount Docker)
 template.env      # gabarit des variables d'environnement
 ```

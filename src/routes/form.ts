@@ -1,12 +1,17 @@
 import { Hono } from 'hono'
+import type { Context } from 'hono'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { join, extname } from 'node:path'
 import { randomBytes } from 'node:crypto'
-import { sendShowcaseFormNotification, type ShowcaseFormScalars } from '../mailer.js'
+import {
+  sendShowcaseFormNotification,
+  sendEcommerceFormNotification,
+  type ShowcaseFormScalars,
+  type EcommerceFormScalars,
+} from '../mailer.js'
 import { isS3Configured, uploadObject } from '../storage.js'
 
 const DATA_DIR = process.env.DATA_DIR ?? 'data'
-const S3_PREFIX = 'showcase-forms'
 
 const form = new Hono()
 
@@ -31,11 +36,16 @@ const persistToDisk = async (dir: string, dataJson: string, assets: Asset[]): Pr
   await Promise.all(assets.map((a) => writeFile(join(dir, a.name), a.buffer)))
 }
 
-const uploadToS3 = async (id: string, dataJson: string, assets: Asset[]): Promise<void> => {
-  const prefix = `${S3_PREFIX}/${id}`
+const uploadToS3 = async (
+  prefix: string,
+  id: string,
+  dataJson: string,
+  assets: Asset[],
+): Promise<void> => {
+  const fullPrefix = `${prefix}/${id}`
   await Promise.all([
-    uploadObject(`${prefix}/data.json`, Buffer.from(dataJson), 'application/json'),
-    ...assets.map((a) => uploadObject(`${prefix}/${a.name}`, a.buffer, a.contentType)),
+    uploadObject(`${fullPrefix}/data.json`, Buffer.from(dataJson), 'application/json'),
+    ...assets.map((a) => uploadObject(`${fullPrefix}/${a.name}`, a.buffer, a.contentType)),
   ])
 }
 
@@ -45,7 +55,13 @@ const collectFiles = (value: unknown): File[] => {
   return []
 }
 
-form.post('/showcase-form', async (c) => {
+type SubmissionConfig<T> = {
+  subdir: string
+  logTag: string
+  notify: (id: string, data: T, folder: string) => Promise<void>
+}
+
+const handleSubmission = async <T>(c: Context, config: SubmissionConfig<T>) => {
   const body = await c.req.parseBody({ all: true })
 
   const dataField = body['data']
@@ -53,9 +69,9 @@ form.post('/showcase-form', async (c) => {
     return c.json({ error: 'Missing or invalid "data" field' }, 400)
   }
 
-  let data: ShowcaseFormScalars
+  let data: T
   try {
-    data = JSON.parse(dataField) as ShowcaseFormScalars
+    data = JSON.parse(dataField) as T
   } catch {
     return c.json({ error: 'Invalid JSON in "data" field' }, 400)
   }
@@ -65,7 +81,7 @@ form.post('/showcase-form', async (c) => {
   const photos = collectFiles(body['photos'])
 
   const id = generateSubmissionId()
-  const dir = join(DATA_DIR, 'showcase-forms', id)
+  const dir = join(DATA_DIR, config.subdir, id)
   const dataJson = JSON.stringify(data, null, 2)
 
   const assets: Asset[] = []
@@ -79,22 +95,22 @@ form.post('/showcase-form', async (c) => {
   const s3Enabled = isS3Configured()
   const [persistResult, s3Result, emailResult] = await Promise.allSettled([
     persistToDisk(dir, dataJson, assets),
-    s3Enabled ? uploadToS3(id, dataJson, assets) : Promise.resolve(),
-    sendShowcaseFormNotification(id, data, dir),
+    s3Enabled ? uploadToS3(config.subdir, id, dataJson, assets) : Promise.resolve(),
+    config.notify(id, data, dir),
   ])
 
   if (persistResult.status === 'rejected') {
-    console.error('[showcase-form] persist failed', persistResult.reason)
+    console.error(`${config.logTag} persist failed`, persistResult.reason)
     return c.json({ error: 'Failed to persist submission' }, 500)
   }
   if (s3Result.status === 'rejected') {
-    console.error('[showcase-form] s3 upload failed', s3Result.reason)
+    console.error(`${config.logTag} s3 upload failed`, s3Result.reason)
   }
   if (emailResult.status === 'rejected') {
-    console.error('[showcase-form] email failed', emailResult.reason)
+    console.error(`${config.logTag} email failed`, emailResult.reason)
   }
   if (!s3Enabled) {
-    console.warn('[showcase-form] S3 not configured, skipping object upload')
+    console.warn(`${config.logTag} S3 not configured, skipping object upload`)
   }
 
   return c.json({
@@ -103,6 +119,22 @@ form.post('/showcase-form', async (c) => {
     emailSent: emailResult.status === 'fulfilled',
     s3Uploaded: s3Result.status === 'fulfilled' && s3Enabled,
   })
-})
+}
+
+form.post('/showcase-form', (c) =>
+  handleSubmission<ShowcaseFormScalars>(c, {
+    subdir: 'showcase-forms',
+    logTag: '[showcase-form]',
+    notify: sendShowcaseFormNotification,
+  }),
+)
+
+form.post('/ecommerce-form', (c) =>
+  handleSubmission<EcommerceFormScalars>(c, {
+    subdir: 'ecommerce-forms',
+    logTag: '[ecommerce-form]',
+    notify: sendEcommerceFormNotification,
+  }),
+)
 
 export default form

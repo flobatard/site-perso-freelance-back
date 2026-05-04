@@ -2,33 +2,36 @@ import { readdir, stat, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 
 const DATA_DIR = process.env.DATA_DIR ?? 'data'
-const SHOWCASE_SUBDIR = 'showcase-forms'
+const SUBDIRS = ['showcase-forms', 'ecommerce-forms']
 const RETENTION_MS = 30 * 24 * 60 * 60 * 1000
 const CLEANUP_INTERVAL_MS = 24 * 60 * 60 * 1000
 
 export const cleanupOldSubmissions = async (): Promise<void> => {
-  const root = join(DATA_DIR, SHOWCASE_SUBDIR)
-  let entries
-  try {
-    entries = await readdir(root, { withFileTypes: true })
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return
-    throw err
-  }
-
   const cutoff = Date.now() - RETENTION_MS
   let removed = 0
-  for (const entry of entries) {
-    if (!entry.isDirectory()) continue
-    const path = join(root, entry.name)
+
+  for (const subdir of SUBDIRS) {
+    const root = join(DATA_DIR, subdir)
+    let entries
     try {
-      const s = await stat(path)
-      if (s.mtimeMs < cutoff) {
-        await rm(path, { recursive: true, force: true })
-        removed++
-      }
+      entries = await readdir(root, { withFileTypes: true })
     } catch (err) {
-      console.error('[cleanup] failed for', path, err)
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') continue
+      throw err
+    }
+
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue
+      const path = join(root, entry.name)
+      try {
+        const s = await stat(path)
+        if (s.mtimeMs < cutoff) {
+          await rm(path, { recursive: true, force: true })
+          removed++
+        }
+      } catch (err) {
+        console.error('[cleanup] failed for', path, err)
+      }
     }
   }
 
