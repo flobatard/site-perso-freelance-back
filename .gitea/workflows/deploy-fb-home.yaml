@@ -65,7 +65,6 @@ jobs:
       - name: Build Docker image
         run: |
           docker build \
-            --build-arg env=preprod \
             -t "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}" \
             -t "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest" \
             .
