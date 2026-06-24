@@ -25,6 +25,8 @@ COPY --from=builder --chown=app:app /app/node_modules ./node_modules
 COPY --from=builder --chown=app:app /app/dist ./dist
 COPY --from=builder --chown=app:app /app/package.json ./package.json
 
+RUN mkdir -p /app/data && chown app:app /app/data
+
 USER app
 
 EXPOSE 3000

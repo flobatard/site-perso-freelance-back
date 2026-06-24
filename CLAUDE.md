@@ -28,7 +28,7 @@ npm run start      # lancer la build compilée (node dist/index.js)
 ## Docker / CI-CD
 
 - [Dockerfile](Dockerfile) : build multi-stage (builder TS → runtime Node slim), utilisateur non-root, expose le port `3000`.
-- [docker-compose.yml](docker-compose.yml) : orchestration pour la CI/CD et le run local du conteneur. Charge le `.env` via `env_file` et bind-monte `./data:/app/data` pour persister les soumissions. Inclut un service `minio` (+ `minio-init` qui crée le bucket) sous le profil `dev` — non démarré par défaut en CI/CD.
+- [docker-compose.yml](docker-compose.yml) : orchestration pour la CI/CD et le run local du conteneur. Charge le `.env` via `env_file` et persiste les soumissions dans le volume nommé `app-data` monté sur `/app/data` (le conteneur tourne en user non-root `app`, UID 100/GID 101 ; le dossier `/app/data` est créé et `chown` dans le Dockerfile pour que le volume hérite du bon ownership à sa création). Inclut un service `minio` (+ `minio-init` qui crée le bucket) sous le profil `dev` — non démarré par défaut en CI/CD.
 - [.dockerignore](.dockerignore) : exclut `node_modules`, `dist`, `data`, fichiers d'env et artefacts de dev.
 
 Build et run local :
