@@ -1,5 +1,7 @@
 import nodemailer from 'nodemailer'
 import type { Transporter } from 'nodemailer'
+import * as L from './labels.js'
+import { label, labelList } from './labels.js'
 
 export type ShowcaseFormScalars = {
   activity: string
@@ -7,7 +9,8 @@ export type ShowcaseFormScalars = {
   goal: string
   inspirations: string
   adjectives: string[]
-  brandAssets: 'yes' | 'no' | ''
+  hasLogo: 'yes' | 'no' | ''
+  hasColors: 'yes' | 'no' | ''
   colors: string[]
   photos: 'yes' | 'no' | ''
   sections: string[]
@@ -101,9 +104,6 @@ const escapeHtml = (value: string): string =>
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;')
 
-const yesNo = (value: 'yes' | 'no' | ''): string =>
-  value === 'yes' ? 'oui' : value === 'no' ? 'non' : ''
-
 const renderShowcaseEmail = (
   id: string,
   data: ShowcaseFormScalars,
@@ -117,24 +117,25 @@ const renderShowcaseEmail = (
     ['Téléphone', data.phone],
     ['Activité', data.activity],
     ['Cible', data.audience],
-    ['Objectif', data.goal],
-    ['Échéance', data.deadline],
+    ['Objectif', label(L.SHOWCASE_GOAL, data.goal)],
+    ['Échéance', label(L.DEADLINE, data.deadline)],
     ['Inspirations', data.inspirations],
-    ['Adjectifs', data.adjectives.join(', ')],
-    ['Assets de marque', yesNo(data.brandAssets)],
+    ['Adjectifs', labelList(L.ADJECTIVES, data.adjectives)],
+    ['Logo ?', label(L.HAS_LOGO, data.hasLogo)],
+    ['Couleurs de marque ?', label(L.HAS_COLORS, data.hasColors)],
     ['Couleurs', data.colors.join(', ')],
-    ['Photos disponibles', yesNo(data.photos)],
-    ['Sections', data.sections.join(', ')],
+    ['Photos disponibles', label(L.SHOWCASE_PHOTOS, data.photos)],
+    ['Sections', labelList(L.SHOWCASE_SECTIONS, data.sections)],
     ['Sections personnalisées', data.customSections.join(', ')],
-    ['Domaine ?', yesNo(data.hasDomain)],
+    ['Domaine ?', label(L.YES_NO, data.hasDomain)],
     ['Nom de domaine', data.domainName],
     ['Notes', data.notes],
-    ['Consentement', data.consent ? 'oui' : 'non'],
+    ['Consentement', data.consent ? 'Oui' : 'Non'],
   ]
   const body = rows
     .map(
-      ([label, value]) =>
-        `<tr><td style="padding:4px 12px 4px 0;vertical-align:top"><strong>${escapeHtml(label)}</strong></td><td style="padding:4px 0;white-space:pre-wrap">${escapeHtml(value || '—')}</td></tr>`,
+      ([name, value]) =>
+        `<tr><td style="padding:4px 12px 4px 0;vertical-align:top"><strong>${escapeHtml(name)}</strong></td><td style="padding:4px 0;white-space:pre-wrap">${escapeHtml(value || '—')}</td></tr>`,
     )
     .join('')
   return `
@@ -166,8 +167,8 @@ export const sendShowcaseFormNotification = async (
 const renderRows = (rows: [string, string][]): string =>
   rows
     .map(
-      ([label, value]) =>
-        `<tr><td style="padding:4px 12px 4px 0;vertical-align:top"><strong>${escapeHtml(label)}</strong></td><td style="padding:4px 0;white-space:pre-wrap">${escapeHtml(value || '—')}</td></tr>`,
+      ([name, value]) =>
+        `<tr><td style="padding:4px 12px 4px 0;vertical-align:top"><strong>${escapeHtml(name)}</strong></td><td style="padding:4px 0;white-space:pre-wrap">${escapeHtml(value || '—')}</td></tr>`,
     )
     .join('')
 
@@ -181,21 +182,9 @@ const renderEcommerceEmail = (
 ): string => {
   const contactName = [data.firstName, data.lastName].filter(Boolean).join(' ')
 
-  const integrationRows: [string, string][] = [
-    ['Comptabilité', data.accounting],
-    ...(data.accountingOther
-      ? [['Comptabilité (autre)', data.accountingOther] as [string, string]]
-      : []),
-    ['ERP / CRM', data.erpCrm],
-    ["Outil d'expédition", data.shippingTool],
-    ...(data.shippingToolOther
-      ? [["Outil d'expédition (autre)", data.shippingToolOther] as [string, string]]
-      : []),
-    ['Sync marketplaces', data.marketplaceSync.join(', ')],
-    ['Migration', data.migration],
-    ['Nb administrateurs', data.adminCount],
-    ['Rôles admin', data.adminRoles],
-  ]
+  // "Autre" + précision saisie → "Autre : <précision>" sur une seule ligne.
+  const withOther = (map: L.Labels, value: string, other: string): string =>
+    value === 'other' && other.trim() ? `Autre : ${other.trim()}` : label(map, value)
 
   return `
     <h2>Nouveau formulaire e-commerce — ${escapeHtml(id)}</h2>
@@ -205,50 +194,58 @@ const renderEcommerceEmail = (
       ['Contact', contactName],
       ['Email', data.email],
       ['Téléphone', data.phone],
-      ['Consentement', data.consent ? 'oui' : 'non'],
+      ['Consentement', data.consent ? 'Oui' : 'Non'],
     ])}
     ${renderSection('Activité', [
       ['Pitch', data.pitch],
-      ['Types de produits', data.productTypes.join(', ')],
-      ['Modèle business', data.businessModel],
-      ['Ventes actuelles', data.currentSales],
-      ['Plateforme actuelle', data.currentPlatform],
+      ['Types de produits', labelList(L.PRODUCT_TYPES, data.productTypes)],
+      ['Clientèle', label(L.BUSINESS_MODEL, data.businessModel)],
+      ['Ventes actuelles', label(L.CURRENT_SALES, data.currentSales)],
+      ['Plateforme actuelle', label(L.CURRENT_PLATFORM, data.currentPlatform)],
       ['Cible', data.audience],
-      ['Plateforme cible', data.targetPlatform],
+      ['Plateforme cible', label(L.TARGET_PLATFORM, data.targetPlatform)],
     ])}
     ${renderSection('Catalogue', [
-      ['Volume au lancement', data.launchVolume],
-      ['Volume annuel', data.yearVolume],
-      ['Variantes', data.variants],
-      ['Gestion stock', data.stockManagement],
-      ['Fiches produits prêtes', data.productSheetsReady],
+      ['Produits au lancement', label(L.VOLUME, data.launchVolume)],
+      ['Produits dans 1 an', label(L.VOLUME, data.yearVolume)],
+      ['Variantes', label(L.VARIANTS, data.variants)],
+      ['Gestion des stocks', label(L.STOCK_MANAGEMENT, data.stockManagement)],
+      ['Fiches produits', label(L.PRODUCT_SHEETS, data.productSheetsReady)],
     ])}
     ${renderSection('Paiement / Livraison / TVA', [
-      ['Moyens de paiement', data.paymentMethods.join(', ')],
-      ['Type de transactions', data.transactionType],
-      ['Devises', data.currencies],
-      ['Zones de livraison', data.shippingZones.join(', ')],
-      ['Méthodes de livraison', data.shippingMethods.join(', ')],
-      ['Livraison gratuite', data.freeShipping],
-      ['TVA', data.vat],
+      ['Moyens de paiement', labelList(L.PAYMENT_METHODS, data.paymentMethods)],
+      ['Type de transaction', label(L.TRANSACTION_TYPE, data.transactionType)],
+      ['Devises', label(L.CURRENCIES, data.currencies)],
+      ['Zones de livraison', labelList(L.SHIPPING_ZONES, data.shippingZones)],
+      ['Modes de livraison', labelList(L.SHIPPING_METHODS, data.shippingMethods)],
+      ['Livraison gratuite', label(L.FREE_SHIPPING, data.freeShipping)],
+      ['TVA', label(L.VAT, data.vat)],
     ])}
     ${renderSection('UX & Marketing', [
-      ['Checkout invité', data.guestCheckout],
-      ['Fonctionnalités', data.features.join(', ')],
-      ['Stratégie SEO', data.seoStrategy],
+      ['Achat invité', label(L.GUEST_CHECKOUT, data.guestCheckout)],
+      ['Fonctionnalités', labelList(L.FEATURES, data.features)],
+      ['Stratégie SEO / SEA', label(L.SEO_STRATEGY, data.seoStrategy)],
     ])}
-    ${renderSection('Intégrations & migration', integrationRows)}
+    ${renderSection('Intégrations & migration', [
+      ['Comptabilité', withOther(L.ACCOUNTING, data.accounting, data.accountingOther)],
+      ['ERP / CRM', data.erpCrm],
+      ["Outil d'expédition", withOther(L.SHIPPING_TOOL, data.shippingTool, data.shippingToolOther)],
+      ['Sync marketplaces', labelList(L.MARKETPLACES, data.marketplaceSync)],
+      ['Migration', label(L.MIGRATION, data.migration)],
+      ['Nb administrateurs', label(L.ADMIN_COUNT, data.adminCount)],
+      ['Rôles admin différents', label(L.YES_NO, data.adminRoles)],
+    ])}
     ${renderSection('Identité & pratique', [
-      ['Logo ?', data.hasLogo],
-      ['Couleurs ?', data.hasColors],
+      ['Logo ?', label(L.HAS_LOGO, data.hasLogo)],
+      ['Couleurs de marque ?', label(L.HAS_COLORS, data.hasColors)],
       ['Couleurs', data.colors.join(', ')],
-      ['Photos produits', data.productPhotos],
+      ['Photos produits', label(L.PRODUCT_PHOTOS, data.productPhotos)],
       ['Inspirations', data.inspirations],
-      ['Adjectifs', data.adjectives.join(', ')],
-      ['Échéance', data.deadline],
-      ['Domaine ?', data.hasDomain],
+      ['Adjectifs', labelList(L.ADJECTIVES, data.adjectives)],
+      ['Échéance', label(L.DEADLINE, data.deadline)],
+      ['Domaine ?', label(L.YES_NO, data.hasDomain)],
       ['Nom de domaine', data.domainName],
-      ['Budget', data.budget],
+      ['Budget', label(L.BUDGET, data.budget)],
       ['Notes', data.notes],
     ])}
   `

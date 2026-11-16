@@ -78,6 +78,8 @@ Génère un identifiant `YYYYMMDDHHMMSS-<6 hex>` puis, en parallèle :
 2. Uploade les mêmes objets sur S3 sous le préfixe `<subdir>/<id>/` si S3 est configuré.
 3. Envoie un mail HTML récapitulatif via SMTP.
 
+Le mail affiche les libellés français des réponses (`gt_1000` → « Plus de 1000 »), via les tables de [src/labels.ts](src/labels.ts) recopiées depuis `src/locales/fr.json` du front (`offering.offerings.<id>.form.*_options`). Une valeur absente de ces tables s'affiche brute : toute nouvelle option ajoutée au formulaire côté front doit aussi y être ajoutée.
+
 Le sous-dossier (et le préfixe S3) vaut `showcase-forms` pour la route vitrine et `ecommerce-forms` pour la route e-commerce.
 
 Réponse JSON : `{ id, folder, emailSent, s3Uploaded }`. 500 si la persistance disque échoue ; les échecs S3 et mail sont loggés mais ne font pas échouer la requête.
@@ -101,6 +103,7 @@ src/
   index.ts        # bootstrap Hono + serveur, CORS, montage des routes, scheduler de cleanup
   cleanup.ts      # purge récurrente des soumissions de plus de 30 jours
   mailer.ts       # transport SMTP nodemailer + template de notification
+  labels.ts       # libellés français des valeurs des formulaires (utilisés par mailer.ts)
   storage.ts      # client S3 + helpers d'upload
   routes/
     form.ts       # /form/showcase-form + /form/ecommerce-form (persistance disque + S3 + mail)
